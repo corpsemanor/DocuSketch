@@ -1,0 +1,67 @@
+---docker-compose.yml---
+
+version: '3'
+services:
+  nosql-db:
+    image: mongo
+    ports:
+      - 27017:27017
+    volumes:
+      - ./data:/data/db
+  python-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - 8080:8080
+    depends_on:
+      - nosql-db
+
+---Dockerfile.txt---
+
+FROM python:3.9
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["python", "app.py"]
+
+---requirements.txt---
+
+Flask==2.0.1
+pymongo==3.12.0
+
+---app.py---
+
+from flask import Flask, request
+from pymongo import MongoClient
+
+app = Flask(__name__)
+client = MongoClient('mongodb://nosql-db:27017/')
+db = client['mydatabase']
+collection = db['mycollection']
+
+@app.route('/', methods=['GET'])
+def get_values():
+    return str(list(collection.find()))
+
+@app.route('/', methods=['POST'])
+def create_value():
+    key = request.form['key']
+    value = request.form['value']
+    collection.insert_one({'key': key, 'value': value})
+    return 'Value created'
+
+@app.route('/', methods=['PUT'])
+def update_value():
+    key = request.form['key']
+    new_value = request.form['new_value']
+    collection.update_one({'key': key}, {'$set': {'value': new_value}})
+    return 'Value updated'
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
